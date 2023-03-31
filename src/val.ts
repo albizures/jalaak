@@ -1,29 +1,40 @@
-const update = Symbol('Update');
-type Update = typeof update;
+const compute = Symbol('Update');
+type Compute = typeof compute;
 
 const empty = Symbol('Empty');
 type Empty = typeof empty;
 
 type ValAct<T> = () => T;
 
+type ValId = symbol;
+
+function createId(title = 'val-id'): ValId {
+	return Symbol(title);
+}
+
 function isValAct<T>(value: unknown): value is ValAct<T> {
 	return typeof value === 'function';
 }
 
-type ValArg<T> = T | Empty | Update;
+type ValArg<T> = T | Empty | Compute;
+interface ValMeta {
+	id: ValId;
+	deps: ValId[];
+	users: ValId[];
+	title?: string;
+}
 
 export interface Val<T> {
 	(value?: ValArg<T>): T;
-	isVal: true;
-	valId: Symbol;
+	_VAL_META_: ValMeta;
 }
 export function isVal(val: unknown): val is Val<unknown> {
 	return typeof val === 'function' && val !== null && 'isVal' in val;
 }
 
-let context: Symbol | undefined;
+let context: ValId | undefined;
 
-function setContext(id: Symbol) {
+function setContext(id: ValId) {
 	context = id;
 }
 
@@ -31,72 +42,118 @@ function unSetContext() {
 	context = undefined;
 }
 
-const vals = new WeakMap<Symbol, Val<unknown>>();
-const deps = new WeakMap<Symbol, Symbol[]>();
+const valsMeta: Record<ValId, ValMeta> = {};
+const vals: Record<ValId, Val<unknown>> = {};
+// const deps = new WeakMap<ValId, ValId[]>();
 
-function addDep(val: Symbol, dep: Symbol) {
-	const list = deps.get(val);
+function addDep(userId: ValId, meta: ValMeta) {
+	const userMeta = getValMeta(userId);
+	if (!userMeta.deps.includes(meta.id)) {
+		userMeta.deps.push(meta.id);
+	}
 
-	if (Array.isArray(list)) {
-		if (!list.includes(dep)) {
-			deps.set(val, list.concat(dep));
-		}
-	} else {
-		deps.set(val, [dep]);
+	if (!meta.users.includes(userId)) {
+		meta.users.push(userId);
 	}
 }
 
-function registerVal<T>(id: Symbol, val: Val<T>) {
-	vals.set(id, val as Val<unknown>);
+function registerValMeta(id: ValId, meta: ValMeta) {
+	valsMeta[id] = meta;
+}
+function registerVal<T>(id: ValId, val: Val<T>) {
+	vals[id] = val as Val<unknown>;
 }
 
-function getVal(id: Symbol) {
-	return vals.get(id);
+function getValMeta(id: ValId) {
+	return valsMeta[id];
+}
+function getVal(id: ValId) {
+	return vals[id];
 }
 
-function updateDeps(val: Symbol) {
-	const list = deps.get(val);
+function cleanDeps(valId: ValId) {
+	for (const id of getValMeta(valId).deps) {
+		getValMeta(id).users = getValMeta(id).users.filter((userId) => userId !== valId);
+	}
 
-	if (list) {
-		for (let index = 0; index < list.length; index++) {
-			const val = getVal(list[index]);
+	getValMeta(valId).deps = [];
+}
 
-			val && val(update);
+function updateUsers(val: ValId) {
+	const list = getValMeta(val).users;
+
+	for (let index = 0; index < list.length; index++) {
+		const val = getVal(list[index]);
+
+		if (val) {
+			// recompute val and its deps
+			val(compute);
+			updateUsers(val._VAL_META_.id);
+			// throw new Error('');
 		}
 	}
 }
 
-export function val<T>(initial: T | ValAct<T>): Val<T> {
-	const id = Symbol('val-id');
+interface ValConfig {
+	title?: string;
+}
 
+function withContext(id: ValId, fn: () => void) {
 	setContext(id);
-	let current: T = isValAct<T>(initial) ? initial() : initial;
+	fn();
 	unSetContext();
+}
+
+export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
+	const { title } = config;
+
+	const id = createId(title);
+	const meta: ValMeta = {
+		id,
+		title,
+		users: [],
+		deps: [],
+	};
+
+	registerValMeta(id, meta);
+
+	let current: T;
+	withContext(id, () => {
+		current = isValAct<T>(initial) ? initial() : initial;
+	});
 
 	function create() {
 		function val(value: ValArg<T> = empty) {
-			if (value === update) {
+			if (value === compute) {
 				if (isValAct(initial)) {
-					current = initial();
+					// act val should be recomputed
+					// and its old deps removed
+					cleanDeps(id);
+
+					withContext(id, () => {
+						current = initial();
+					});
 				}
 				return;
 			}
 
 			if (value !== empty) {
+				// a new value was provided.
 				current = value;
-				updateDeps(id);
+				// deps should be updated
+				updateUsers(id);
+
 				return current;
 			}
 
 			if (context) {
-				addDep(id, context);
+				addDep(context, meta);
 			}
 
 			return current;
 		}
 
-		val.isVal = true;
-		val.valId = id;
+		val._VAL_META_ = meta;
 
 		return val as Val<T>;
 	}
