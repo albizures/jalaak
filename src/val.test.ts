@@ -29,6 +29,24 @@ describe('acts', () => {
 			expect(message()).toBe('Hello John!');
 		});
 	});
+	describe('when a dependency receives an update event but maintains the same value', () => {
+		it("shouldn't recompute the value", () => {
+			const name = val('World', { title: 'name' });
+
+			const messageAct = vi.fn(() => {
+				return `Hello ${name()}!`;
+			});
+
+			const message = val(messageAct, { title: 'message' });
+
+			expect(message()).toBe('Hello World!');
+
+			name('World');
+
+			expect(message()).toBe('Hello World!');
+			expect(messageAct).toHaveBeenCalledTimes(1);
+		});
+	});
 
 	describe('when a nested dependency changes', () => {
 		it('should recompute all the dependencies ', () => {

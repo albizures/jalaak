@@ -104,6 +104,14 @@ function withContext(id: ValId, fn: () => void) {
 	unSetContext();
 }
 
+function isNewValue<T>(current: T, value: ValArg<T>): value is T {
+	return value !== empty && !Object.is(value, current);
+}
+
+function shouldRecompute<T>(value: ValArg<T>) {
+	return value === compute;
+}
+
 export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 	const { title } = config;
 
@@ -124,7 +132,7 @@ export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 
 	function create() {
 		function val(value: ValArg<T> = empty) {
-			if (value === compute) {
+			if (shouldRecompute(value)) {
 				if (isValAct(initial)) {
 					// act val should be recomputed
 					// and its old deps removed
@@ -137,7 +145,7 @@ export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 				return;
 			}
 
-			if (value !== empty) {
+			if (isNewValue(current, value)) {
 				// a new value was provided.
 				current = value;
 				// deps should be updated
