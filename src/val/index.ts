@@ -1,20 +1,12 @@
+import { context, withContext, withLazyContext } from './context';
+import { createId, isValAct } from './helpers';
+import { ValAct, ValId } from './types';
+
 export const compute = Symbol('Update');
 export type Compute = typeof compute;
 
 export const empty = Symbol('Empty');
 export type Empty = typeof empty;
-
-export type ValAct<T> = () => T;
-
-export type ValId = symbol;
-
-export function createId(title = 'val-id'): ValId {
-	return Symbol(title);
-}
-
-export function isValAct<T>(value: unknown): value is ValAct<T> {
-	return typeof value === 'function';
-}
 
 export type ValArg<T> = T | Empty | Compute;
 export interface ValMeta {
@@ -33,45 +25,6 @@ export interface Val<T> {
 
 export function isVal(val: unknown): val is Val<unknown> {
 	return typeof val === 'function' && val !== null && '_VAL_META_' in val;
-}
-
-export interface Context {
-	lazy?: ValId;
-	eager?: ValId;
-}
-
-export const context: Context = {
-	eager: undefined,
-	lazy: undefined,
-};
-
-function setContext(id: ValId) {
-	context.eager = id;
-	context.lazy = undefined;
-}
-function setLazyContext(id: ValId) {
-	context.lazy = id;
-	context.eager = undefined;
-}
-
-export function withContext(id: ValId, fn: () => void) {
-	const old = { ...context };
-
-	console.group('- context eager', id);
-	setContext(id);
-	fn();
-	Object.assign(context, old);
-	console.groupEnd();
-}
-
-export function withLazyContext(id: ValId, fn: () => void) {
-	const old: Context = { ...context };
-
-	console.group('- context lazy', id);
-	setLazyContext(id);
-	fn();
-	Object.assign(context, old);
-	console.groupEnd();
 }
 
 export const valsMeta: Record<ValId, ValMeta> = {};
@@ -263,3 +216,7 @@ export function lazyContextMeta() {
 export function eagerContextMeta() {
 	return context.eager && getValMeta(context.eager);
 }
+
+export { context, withContext, withLazyContext } from './context';
+export { createId, isValAct } from './helpers';
+export type { ValAct, ValId } from './types';
