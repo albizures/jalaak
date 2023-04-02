@@ -21,6 +21,8 @@ interface ValMeta {
 	id: ValId;
 	deps: ValId[];
 	users: ValId[];
+	dirtyDeps: ValId[];
+	lazy: boolean;
 	title?: string;
 }
 
@@ -29,25 +31,61 @@ export interface Val<T> {
 	_VAL_META_: ValMeta;
 }
 export function isVal(val: unknown): val is Val<unknown> {
-	return typeof val === 'function' && val !== null && 'isVal' in val;
+	return typeof val === 'function' && val !== null && '_VAL_META_' in val;
 }
 
-let context: ValId | undefined;
+interface Context {
+	lazy?: ValId;
+	eager?: ValId;
+}
+
+const context: Context = {
+	eager: undefined,
+	lazy: undefined,
+};
 
 function setContext(id: ValId) {
-	context = id;
+	context.eager = id;
+	context.lazy = undefined;
+}
+function setLazyContext(id: ValId) {
+	context.lazy = id;
+	context.eager = undefined;
 }
 
-function unSetContext() {
-	context = undefined;
+function withContext(id: ValId, fn: () => void) {
+	const old = { ...context };
+	console.log('start', context);
+
+	console.group('- context eager', id);
+	setContext(id);
+	fn();
+	// unSetContext();
+	Object.assign(context, old);
+	console.groupEnd();
+	console.log('end context', context);
+}
+
+function withLazyContext(id: ValId, fn: () => void) {
+	const old: Context = { ...context };
+	console.group('- context lazy', id);
+
+	setLazyContext(id);
+	fn();
+	// unSetLazyContext();
+	Object.assign(context, old);
+	console.groupEnd();
+	console.log('end context', context);
 }
 
 const valsMeta: Record<ValId, ValMeta> = {};
 const vals: Record<ValId, Val<unknown>> = {};
-// const deps = new WeakMap<ValId, ValId[]>();
 
 function addDep(userId: ValId, meta: ValMeta) {
+	console.log('adding', userId, 'as user of', meta.id);
+
 	const userMeta = getValMeta(userId);
+
 	if (!userMeta.deps.includes(meta.id)) {
 		userMeta.deps.push(meta.id);
 	}
@@ -64,44 +102,52 @@ function registerVal<T>(id: ValId, val: Val<T>) {
 	vals[id] = val as Val<unknown>;
 }
 
-function getValMeta(id: ValId) {
+export function getValMeta(id: ValId) {
 	return valsMeta[id];
 }
-function getVal(id: ValId) {
+export function getVal(id: ValId) {
 	return vals[id];
 }
 
-function cleanDeps(valId: ValId) {
-	for (const id of getValMeta(valId).deps) {
-		getValMeta(id).users = getValMeta(id).users.filter((userId) => userId !== valId);
+function cleanDeps(meta: ValMeta) {
+	for (const id of meta.deps) {
+		const depMeta = getValMeta(id);
+		depMeta.users = depMeta.users.filter((userId) => userId !== meta.id);
 	}
 
-	getValMeta(valId).deps = [];
+	meta.deps.length = 0;
 }
 
-function updateUsers(val: ValId) {
-	const list = getValMeta(val).users;
+function updateUsers(meta: ValMeta) {
+	const { users } = meta;
+	console.log('update', meta.id);
 
-	for (let index = 0; index < list.length; index++) {
-		const val = getVal(list[index]);
+	if (users.includes(meta.id)) {
+		throw new Error('recursive');
+	}
 
-		if (val) {
-			// recompute val and its deps
-			val(compute);
-			updateUsers(val._VAL_META_.id);
-			// throw new Error('');
+	for (const userId of users) {
+		const user = getVal(userId);
+		const { lazy, dirtyDeps } = user._VAL_META_;
+
+		if (lazy) {
+			// let's leave the recompute for later
+			// and save the deps that changed
+			if (!dirtyDeps.includes(meta.id)) {
+				dirtyDeps.push(meta.id);
+			}
+		} else {
+			// recompute val
+			user(compute);
 		}
+		// do the same for its deps
+		updateUsers(user._VAL_META_);
 	}
 }
 
 interface ValConfig {
 	title?: string;
-}
-
-function withContext(id: ValId, fn: () => void) {
-	setContext(id);
-	fn();
-	unSetContext();
+	lazy?: boolean;
 }
 
 function isNewValue<T>(current: T, value: ValArg<T>): value is T {
@@ -112,23 +158,60 @@ function shouldRecompute<T>(value: ValArg<T>) {
 	return value === compute;
 }
 
+export function act<T>(initial: ValAct<T>, config: Omit<ValConfig, 'lazy'> = {}) {
+	return val(initial, {
+		...config,
+		lazy: false,
+	});
+}
+
+function hasDirtyDeps(meta: ValMeta) {
+	return meta.dirtyDeps.length > 0;
+}
+
+function cleanDirtyDeps(meta: ValMeta) {
+	meta.dirtyDeps.length = 0;
+}
+
 export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
-	const { title } = config;
+	const { title, lazy = true } = config;
 
 	const id = createId(title);
 	const meta: ValMeta = {
 		id,
 		title,
+		lazy,
+		dirtyDeps: [],
 		users: [],
 		deps: [],
 	};
 
 	registerValMeta(id, meta);
 
+	const isAct = isValAct<T>(initial);
+
 	let current: T;
-	withContext(id, () => {
-		current = isValAct<T>(initial) ? initial() : initial;
-	});
+
+	function compute() {
+		current = (initial as ValAct<T>)();
+	}
+
+	if (isAct) {
+		if (!lazy) {
+			if (context.eager) {
+				console.log('adding deps eagerly from eager context');
+				addDep(context.eager, meta);
+			}
+			if (context.lazy) {
+				console.log('adding deps eagerly from lazy context');
+				addDep(context.lazy, meta);
+			}
+
+			withContext(id, compute);
+		}
+	} else {
+		current = initial;
+	}
 
 	function create() {
 		function val(value: ValArg<T> = empty) {
@@ -136,11 +219,8 @@ export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 				if (isValAct(initial)) {
 					// act val should be recomputed
 					// and its old deps removed
-					cleanDeps(id);
-
-					withContext(id, () => {
-						current = initial();
-					});
+					cleanDeps(meta);
+					withContext(id, compute);
 				}
 				return;
 			}
@@ -149,13 +229,22 @@ export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 				// a new value was provided.
 				current = value;
 				// deps should be updated
-				updateUsers(id);
+				updateUsers(meta);
 
 				return current;
 			}
 
-			if (context) {
-				addDep(context, meta);
+			if (context.eager) {
+				addDep(context.eager, meta);
+			}
+			if (context.lazy) {
+				addDep(context.lazy, meta);
+			}
+
+			if (lazy && isAct && (hasDirtyDeps(meta) || current === undefined)) {
+				cleanDirtyDeps(meta);
+				cleanDeps(meta);
+				withLazyContext(id, compute);
 			}
 
 			return current;
@@ -170,4 +259,11 @@ export function val<T>(initial: T | ValAct<T>, config: ValConfig = {}): Val<T> {
 	registerVal(id, val);
 
 	return val;
+}
+
+export function lazyContextMeta() {
+	return context.lazy && getValMeta(context.lazy);
+}
+export function eagerContextMeta() {
+	return context.eager && getValMeta(context.eager);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { val } from './val';
+import { act, val } from './val';
 
 it('should return the current value', () => {
 	const foo = val(1);
@@ -11,6 +11,29 @@ it('should return the current value', () => {
 });
 
 describe('acts', () => {
+	it('should eagerly recompute', () => {
+		const name = val('World', { title: 'name' });
+		const mrName = val(() => `Mr ${name()}`, { title: 'mr' });
+
+		const messageAct = vi.fn(() => {
+			return `Hello ${mrName()}!`;
+		});
+
+		const message = act(messageAct, { title: 'message' });
+
+		expect(messageAct).toHaveBeenCalledTimes(1);
+		expect(message()).toBe('Hello Mr World!');
+		// no need
+		expect(messageAct).toHaveBeenCalledTimes(1);
+
+		name('John');
+		console.log(message._VAL_META_.dirtyDeps);
+		console.log(mrName._VAL_META_.dirtyDeps);
+		expect(messageAct).toHaveBeenCalledTimes(2);
+		expect(message()).toBe('Hello Mr John!');
+		expect(messageAct).toHaveBeenCalledTimes(2);
+	});
+
 	describe('when a dependency changes', () => {
 		it('should recompute the value', () => {
 			const name = val('World', { title: 'name' });
@@ -29,6 +52,73 @@ describe('acts', () => {
 			expect(message()).toBe('Hello John!');
 		});
 	});
+
+	describe('when acts lazily', () => {
+		it('should only compute on demand', () => {
+			const name = val('World', { title: 'name' });
+
+			const messageAct = vi.fn(() => {
+				return `Hello ${name()}!`;
+			});
+			const message = val(messageAct, { title: 'message' });
+
+			name('John');
+			expect(messageAct).toBeCalledTimes(0);
+			expect(message()).toBe('Hello John!');
+			expect(messageAct).toBeCalledTimes(1);
+
+			name('Mike');
+			expect(messageAct).toBeCalledTimes(1);
+			expect(message()).toBe('Hello Mike!');
+		});
+
+		it('should only compute once it has users', () => {
+			const name = val('John', { title: 'name' });
+			const age = val(20, { title: 'age' });
+			const time = val(10, { title: 'time' });
+			const messageTime = val(() => (time() > 12 ? 'Good afternoon' : 'Good morning'), {
+				title: 'message-time',
+			});
+			const isAdult = val(() => age() > 18, { title: 'isAdult' });
+
+			const log = vi.fn((value) => {
+				console.log(value);
+			});
+			const messageAct = vi.fn(() => {
+				return `${messageTime()} ${name()}!`;
+			});
+
+			const message = val(messageAct, { title: 'message' });
+
+			name('Mike');
+			time(11);
+			expect(messageAct).toBeCalledTimes(0);
+			act(
+				() => {
+					if (isAdult()) {
+						log(message());
+					}
+				},
+				{ title: 'act' },
+			);
+			expect(log).toBeCalledTimes(1); // first compute
+			expect(messageAct).toBeCalledTimes(1);
+
+			name('Peter');
+			time(14);
+			// recompute because changed from dependencies
+			expect(log).toBeCalledTimes(3);
+			expect(messageAct).toBeCalledTimes(3);
+			age(10);
+
+			name('John');
+			time(14);
+			expect(log).toBeCalledTimes(3); // no recompute since name is not use anymore
+			expect(messageAct).toBeCalledTimes(3);
+			expect(message()).toBe('Good afternoon John!');
+		});
+	});
+
 	describe('when a dependency receives an update event but maintains the same value', () => {
 		it("shouldn't recompute the value", () => {
 			const name = val('World', { title: 'name' });

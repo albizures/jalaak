@@ -2,8 +2,6 @@ lockfileVersion: 5.4
 
 specifiers:
   '@albizures/prettier-config': ^1.0.1
-  '@artalar/act': ^3.2.1
-  '@reactively/core': ^0.0.7
   csstype: ^3.1.1
   typescript: ^4.9.3
   utility-types: ^3.10.0
@@ -11,8 +9,6 @@ specifiers:
   vitest: ^0.29.3
 
 dependencies:
-  '@artalar/act': 3.2.1
-  '@reactively/core': 0.0.7
   csstype: 3.1.1
   utility-types: 3.10.0
 
@@ -27,10 +23,6 @@ packages:
   /@albizures/prettier-config/1.0.1:
     resolution: {integrity: sha512-OzpkKgjdfI2EqCG4BQL9crqLDRY69o2aVTkT6O0bj9jHy4nP370yWFJRbDvCt/80Dqv2tb97CTCvSpknfE5S+A==}
     dev: true
-
-  /@artalar/act/3.2.1:
-    resolution: {integrity: sha512-M+I5FlpOjKfwPyiGTzG0H+tZRE252mkNfMAJM0EGoNXgjlfakunriOZ6h12+RP6ed6awbB3kKh72R8AHg4OZDg==}
-    dev: false
 
   /@esbuild/android-arm/0.17.12:
     resolution: {integrity: sha512-E/sgkvwoIfj4aMAPL2e35VnUJspzVYl7+M1B2cqeubdBhADV4uPon0KCc8p2G+LqSJ6i8ocYPCqY3A4GGq0zkQ==}
@@ -229,10 +221,6 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
-
-  /@reactively/core/0.0.7:
-    resolution: {integrity: sha512-dN6rhpoCrRr5In5dSclmzwmevCqMNyWi9t7U3OQA1l3rnFGAntKe+1aUEvRnWPVwv8Cj6fkz+6hF1Vn3Ked4Qg==}
-    dev: false
 
   /@types/chai-subset/1.3.3:
     resolution: {integrity: sha512-frBecisrNGz+F4T6bcc+NLeolfiojh5FxW2klu669+8BARtyQv2C/GkNW6FUodVe4BroGMP/wER/YDGc7rEllw==}
