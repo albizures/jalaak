@@ -3,7 +3,7 @@ import { Val, val } from './val';
 
 interface ResetBtnProps {
 	value: Val<string>;
-	children: JSX.Node;
+	// children: JSX.Node;
 }
 
 function ResetBtn(props: ResetBtnProps) {
@@ -18,19 +18,50 @@ function ResetBtn(props: ResetBtnProps) {
 	return <button onclick={onClick}>reset</button>;
 }
 
+function onlyIf<T>(condition: Val<T>, fn: (value: T) => JSX.Element) {
+	return val(() => {
+		const value = condition();
+
+		if (value) {
+			return fn(value);
+		}
+
+		return;
+	});
+}
+
 export function App() {
 	const name = val('');
+	const isShown = val(false);
 	function onInput(event: JSX.InputEvent) {
 		name(event.target.value);
 	}
 
+	const message = val(() => {
+		const nameVal = name();
+		return `Hello ${nameVal === '' ? 'World' : nameVal}!`;
+	});
+
+	function onChecked(event: JSX.InputEvent) {
+		isShown(event.target.checked);
+	}
+
 	return (
 		<div>
-			<h1>{name}</h1>
-			<ResetBtn value={name}>
-				<h1>asdf</h1>
-			</ResetBtn>
-			<input oninput={onInput} value={name} />
+			<h1>Name: {name}</h1>
+
+			<div>
+				<ResetBtn value={name} />
+
+				<input oninput={onInput} value={name} />
+			</div>
+			<label>
+				Show message
+				<input oninput={onChecked} checked={isShown} type="checkbox" />
+			</label>
+			{onlyIf(isShown, () => {
+				return <p>{message}</p>;
+			})}
 		</div>
 	);
 }

@@ -13,7 +13,17 @@ interface AElement<P = unknown, T extends AComponent<any> | string = AComponent<
 type Primitive = string | number;
 type ValPrimitive = DistributeVal<Primitive>;
 
-type AChild = Primitive | AElement | Iterable<AElement> | undefined | ValPrimitive;
+type AChild =
+	| Primitive
+	| AElement
+	| Iterable<AElement>
+	| Val<AChildren | undefined>
+	| Val<AChild | undefined>
+	| Val<AElement | undefined>
+	| Val<undefined>
+	| undefined
+	| ValPrimitive
+	| boolean;
 type AChildren = AChild[];
 
 declare global {
@@ -90,13 +100,15 @@ interface AnchorHTMLAttributes extends HTMLAttributes<HTMLAnchorElement> {
 
 type Attr<K extends keyof HTMLElement, V = HTMLElement[K]> = V | Val<V>;
 
-type DistributeVal<U> = U extends any ? Val<U> : never;
+type DistributeVal<U> = U extends any ? (U extends boolean ? Val<boolean> : Val<U>) : never;
 
 type InputAttr<K extends keyof HTMLInputElement, V = HTMLInputElement[K]> = V | DistributeVal<V>;
 
 interface InputHTMLAttributes extends HTMLAttributes<HTMLInputElement> {
 	placeholder?: InputAttr<'placeholder'>;
-	value: InputAttr<'value', string | number>;
+	value?: InputAttr<'value', string | number>;
+	type?: InputAttr<'type'>;
+	checked?: InputAttr<'checked'>;
 }
 
 interface HTMLAttributes<T extends HTMLElement> extends AriaAttributes, CustomAttributes<T> {
