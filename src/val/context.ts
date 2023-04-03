@@ -1,3 +1,4 @@
+import { getValMeta } from './meta';
 import { ValId } from './types';
 
 export interface Context {
@@ -22,19 +23,22 @@ function setLazyContext(id: ValId) {
 export function withContext(id: ValId, fn: () => void) {
 	const old = { ...context };
 
-	console.group('- context eager', id);
 	setContext(id);
 	fn();
 	Object.assign(context, old);
-	console.groupEnd();
 }
 
 export function withLazyContext(id: ValId, fn: () => void) {
 	const old: Context = { ...context };
 
-	console.group('- context lazy', id);
 	setLazyContext(id);
 	fn();
 	Object.assign(context, old);
-	console.groupEnd();
+}
+
+export function lazyContextMeta() {
+	return context.lazy && getValMeta(context.lazy);
+}
+export function eagerContextMeta() {
+	return context.eager && getValMeta(context.eager);
 }

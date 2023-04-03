@@ -1,7 +1,6 @@
 import { expect, describe, it } from 'vitest';
 import { context, withContext, withLazyContext } from './context';
-import { ValId } from './types';
-import { createId } from './helpers';
+import { ValId, createId } from './types';
 
 const emptyContext = { eager: undefined, lazy: undefined };
 function expectEmptyContext() {
